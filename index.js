@@ -1,4 +1,4 @@
-const { PublicKey, Keypair, SystemProgram, Transaction, Connection, clusterApiUrl } = require("@solana/web3.js");
+const { PublicKey, Keypair, SystemProgram, Transaction, Connection, clusterApiUrl, NonceAccount, NONCE_ACCOUNT_LENGTH } = require("@solana/web3.js");
 const {
     AccountLayout,
     ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -180,9 +180,43 @@ const run = async () => {
         .add(signMetadataInstruction)
         .add(createCollectionMasterEditionInstruction);
 
+    const nonceKeypair = Keypair.generate();
+    const nonceTx = SystemProgram.createNonceAccount({
+        fromPubkey: adminKeypair.publicKey,
+        lamports: await connection.getMinimumBalanceForRentExemption(NONCE_ACCOUNT_LENGTH),
+        noncePubkey: nonceKeypair.publicKey,
+        authorizedPubkey: adminKeypair.publicKey,
+    });
+
+    // tx1.sign(nonceKeypair);
+    // tx1.sign(collectionNFTMintKeypair);
+    const nonceAdvance = SystemProgram.nonceAdvance({
+        authorizedPubkey: adminKeypair.publicKey,
+        noncePubkey: nonceKeypair.publicKey,
+    });
+
+    const { blockhash } = await connection.getLatestBlockhash();
+
+    tx1.nonceInfo = {
+        nonceInstruction: nonceAdvance,
+        nonce: blockhash
+    };
+
+    tx1.sign(adminKeypair, collectionNFTMintKeypair);
+
+    // const { blockhash } = await connection.getLatestBlockhash();
+    // tx1.setSigners([adminKeypair, collectionNFTMintKeypair])
+    // console.log(tx1.nonceInfo);
+    console.log(tx1.serializeMessage().toString("base64"));
+    return;
+    connection.sendTransaction(nonceTx, [adminKeypair, nonceKeypair]);
+    console.log(nonceKeypair.publicKey.toBase58());
+
+    // console.log(tx1.serializeMessage().toString("base64"));
     try {
         // we have to sign the transaction with our newly created collectionNFTMintKeypair to prove we own
         // it.
+        // console.log(tx1.serializeMessage().toString("base64"));
         const tx1Signature = await connection.sendTransaction(tx1, [adminKeypair, collectionNFTMintKeypair]);
         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
         const confirmation = await connection.confirmTransaction({ signature: tx1Signature, blockhash, lastValidBlockHeight });
